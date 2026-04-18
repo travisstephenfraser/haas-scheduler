@@ -2,3 +2,5 @@
 !.gitignore
 !index.html
 !courses_data.json
+!vercel.json
+!README.md
