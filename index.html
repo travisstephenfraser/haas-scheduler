@@ -1280,6 +1280,34 @@ body::after {
 }
 
 /* ══════════════════════════════════════════════════════════════
+   TOAST (transient status message)
+   ══════════════════════════════════════════════════════════════ */
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 28px;
+  transform: translateX(-50%) translateY(12px);
+  background: var(--fg);
+  color: var(--bg-base);
+  padding: 10px 16px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: -0.005em;
+  box-shadow: 0 8px 28px rgba(0,0,0,.22);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .22s ease, transform .22s cubic-bezier(.2,.8,.2,1);
+  z-index: 200;
+  max-width: calc(100vw - 32px);
+  text-align: center;
+}
+.toast.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+/* ══════════════════════════════════════════════════════════════
    MENU TOGGLE + SIDEBAR BACKDROP (desktop: hidden)
    ══════════════════════════════════════════════════════════════ */
 #menu-toggle {
@@ -1485,10 +1513,12 @@ body.sidebar-open #sidebar-backdrop { opacity: 1; }
     <span id="unit-summary"><span id="unit-count">0</span> units</span>
     <span id="conflict-warn">⚠ Conflict</span>
     <div id="backup-buttons">
+      <button class="btn-backup" id="btn-sync" title="Copy a link that loads this schedule on another device">Sync link</button>
       <button class="btn-backup" id="btn-export" title="Download all scheduler data as JSON">Export</button>
       <button class="btn-backup" id="btn-import" title="Restore from JSON">Import</button>
       <input type="file" id="import-file" accept="application/json,.json" style="display:none">
     </div>
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
   </div>
   <div id="sidebar-disclaimer">Built by Martin &amp; Travis · unofficial, not endorsed by Haas</div>
 </aside>
@@ -2884,6 +2914,133 @@ function wireBackup() {
     if (f) importData(f);
     e.target.value = '';
   });
+  const syncBtn = document.getElementById('btn-sync');
+  if (syncBtn) syncBtn.addEventListener('click', copySyncLink);
+}
+
+/* ────────────────────────────────────────────────
+   Sync-URL flow
+   Serialize schedule state → gzip → base64url → URL fragment.
+   Fragment (#...) is never sent to the server, so the payload
+   stays client-side. One link, paste on any device, imports.
+   ──────────────────────────────────────────────── */
+const SYNC_VERSION = 1;
+
+function toast(msg, ms = 2400) {
+  const el = document.getElementById('toast');
+  if (!el) { console.log(msg); return; }
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => el.classList.remove('show'), ms);
+}
+
+function b64urlEncode(bytes) {
+  let s = '';
+  for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
+  return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+function b64urlDecode(str) {
+  const pad = (4 - (str.length % 4)) % 4;
+  const b64 = str.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat(pad);
+  const bin = atob(b64);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+async function compressJson(obj) {
+  const json = JSON.stringify(obj);
+  if (typeof CompressionStream === 'undefined') {
+    // Fallback: no compression, just base64url of UTF-8 bytes. Marked with prefix "r" (raw).
+    return 'r' + b64urlEncode(new TextEncoder().encode(json));
+  }
+  const stream = new Blob([json]).stream().pipeThrough(new CompressionStream('gzip'));
+  const buf = await new Response(stream).arrayBuffer();
+  return 'g' + b64urlEncode(new Uint8Array(buf));
+}
+async function decompressJson(str) {
+  if (!str) return null;
+  const tag = str[0];
+  const body = str.slice(1);
+  const bytes = b64urlDecode(body);
+  if (tag === 'r') return JSON.parse(new TextDecoder().decode(bytes));
+  if (tag === 'g') {
+    if (typeof DecompressionStream === 'undefined') throw new Error('Your browser does not support decompression. Update your browser and try again.');
+    const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
+    const buf = await new Response(stream).arrayBuffer();
+    return JSON.parse(new TextDecoder().decode(buf));
+  }
+  throw new Error('Unrecognized sync link format.');
+}
+
+async function buildSyncPayload() {
+  return {
+    v: SYNC_VERSION,
+    t: Date.now(),
+    cs_states: states,
+    cs_colors: colorMap,
+    cs_custom: customCourses,
+    cs_overrides: termOverrides
+  };
+}
+
+async function copySyncLink() {
+  try {
+    const payload = await buildSyncPayload();
+    const encoded = await compressJson(payload);
+    const url = `${location.origin}${location.pathname}#sync=${encoded}`;
+    if (url.length > 30000) { toast('Schedule too large for a sync link. Use Export instead.'); return; }
+
+    let copied = false;
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(url);
+        copied = true;
+      }
+    } catch (e) { /* fall through to prompt */ }
+    if (!copied) {
+      // Fallback for file:// and older browsers: show the URL for manual copy.
+      window.prompt('Copy this link to load your schedule on another device:', url);
+      return;
+    }
+    toast('Sync link copied — paste in any browser to load this schedule');
+  } catch (err) {
+    console.error(err);
+    toast('Could not create sync link.');
+  }
+}
+
+async function handleSyncHashOnLoad() {
+  const m = window.location.hash.match(/(?:^|&)sync=([A-Za-z0-9_\-]+)/);
+  if (!m) return;
+  const encoded = m[1];
+  // Strip the hash immediately so a refresh doesn't re-prompt
+  try {
+    history.replaceState(null, '', location.pathname + location.search);
+  } catch (e) {}
+  let payload;
+  try { payload = await decompressJson(encoded); }
+  catch (err) { toast('Invalid sync link.'); return; }
+  if (!payload || typeof payload !== 'object') { toast('Invalid sync link.'); return; }
+
+  const s  = sanitizeStates(payload.cs_states);
+  const cl = sanitizeColors(payload.cs_colors);
+  const cu = sanitizeCustom(payload.cs_custom);
+  const ov = sanitizeOverrides(payload.cs_overrides);
+  if (s === null && cl === null && cu === null && ov === null) { toast('Sync link has no schedule data.'); return; }
+
+  const when = payload.t ? new Date(payload.t).toLocaleString() : 'unknown time';
+  if (!confirm(`Load schedule from sync link (created ${when})?\n\nThis replaces your current selections on this device.`)) return;
+
+  if (s)  { states = s;          safeSet('cs_states',    JSON.stringify(states)); }
+  if (cl) { colorMap = cl;       colorCounter = Object.keys(colorMap).length;
+                                 safeSet('cs_colors',    JSON.stringify(colorMap)); }
+  if (cu) { customCourses = cu;  saveCustom(); }
+  if (ov) { termOverrides = ov;  saveOverrides(); }
+  rebuildCourses();
+  renderAll();
+  toast('Schedule loaded from sync link');
 }
 
 loadTheme();
@@ -2896,6 +3053,7 @@ rebuildCourses();
 wireModal();
 wireBackup();
 renderAll();
+handleSyncHashOnLoad();
 // Refresh now-line every minute
 setInterval(renderGrid, 60000);
 
