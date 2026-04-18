@@ -3012,7 +3012,10 @@ async function copySyncLink() {
 }
 
 async function handleSyncHashOnLoad() {
-  const m = window.location.hash.match(/(?:^|&)sync=([A-Za-z0-9_\-]+)/);
+  // location.hash includes the leading "#", e.g. "#sync=abc" — strip it before matching.
+  const hash = (window.location.hash || '').replace(/^#/, '');
+  if (!hash) return;
+  const m = hash.match(/(?:^|&)sync=([A-Za-z0-9_\-]+)/);
   if (!m) return;
   const encoded = m[1];
   // Strip the hash immediately so a refresh doesn't re-prompt
