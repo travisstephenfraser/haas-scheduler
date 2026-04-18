@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fall 2026 Course Planner</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; display: flex; height: 100vh; overflow: hidden; background: #f0f2f5; color: #1a1a1a; font-size: 13px; }
+
+/* ── Sidebar ── */
+#sidebar {
+  width: 340px; min-width: 280px; display: flex; flex-direction: column;
+  background: #fff; border-right: 1px solid #e0e0e0; z-index: 10;
+}
+#sidebar-header { padding: 14px 16px 10px; border-bottom: 1px solid #e0e0e0; }
+#sidebar-header h1 { font-size: 15px; font-weight: 700; color: #111; margin-bottom: 10px; }
+#search { width: 100%; padding: 7px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px; outline: none; }
+#search:focus { border-color: #2563eb; box-shadow: 0 0 0 2px rgba(37,99,235,.12); }
+.tabs { display: flex; gap: 6px; margin-top: 10px; }
+.tab { flex: 1; padding: 5px 8px; border: 1px solid #ddd; background: #f5f5f5; border-radius: 5px; cursor: pointer; font-size: 12px; text-align: center; transition: all .15s; }
+.tab.active { background: #2563eb; border-color: #2563eb; color: #fff; font-weight: 600; }
+.tab:hover:not(.active) { background: #eee; }
+
+#course-list { flex: 1; overflow-y: auto; padding: 8px 8px; }
+
+.card {
+  background: #fff; border: 1px solid #e0e0e0; border-radius: 8px; padding: 10px 11px;
+  margin-bottom: 7px; transition: box-shadow .15s, opacity .15s;
+  border-left: 3px solid #ddd;
+}
+.card:hover { box-shadow: 0 1px 6px rgba(0,0,0,.1); }
+.card.added { border-left-color: var(--course-color, #2563eb); background: var(--course-bg, #eff6ff); }
+.card.discarded { opacity: .45; border-left-color: #bbb; }
+.card.no-schedule { border-left-style: dashed; }
+.card.conflict-highlight { outline: 2px solid #ef4444; outline-offset: 1px; }
+
+.card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 6px; margin-bottom: 4px; }
+.course-id { font-weight: 700; font-size: 12px; color: #2563eb; white-space: nowrap; }
+.card.discarded .course-id { color: #888; }
+.course-name { font-weight: 600; font-size: 12.5px; flex: 1; line-height: 1.3; }
+.course-meta { color: #666; font-size: 11.5px; margin-top: 3px; display: flex; flex-wrap: wrap; gap: 4px 10px; }
+.meta-item { white-space: nowrap; }
+.meta-item.time { font-weight: 500; color: #444; }
+.badges { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 5px; }
+.badge { font-size: 10px; padding: 1px 5px; border-radius: 3px; background: #f0f0f0; color: #555; }
+.badge.exp { background: #dcfce7; color: #166534; }
+.badge.biz { background: #dbeafe; color: #1e3a8a; }
+.badge.new { background: #fef9c3; color: #713f12; }
+.badge.online { background: #f3e8ff; color: #6b21a8; }
+
+.card-actions { display: flex; gap: 5px; margin-top: 8px; }
+.btn { padding: 4px 10px; border-radius: 5px; border: 1px solid; cursor: pointer; font-size: 11.5px; font-weight: 500; transition: all .15s; white-space: nowrap; }
+.btn-add { background: #fff; border-color: #2563eb; color: #2563eb; }
+.btn-add:hover { background: #eff6ff; }
+.btn-remove { background: #fff; border-color: #dc2626; color: #dc2626; }
+.btn-remove:hover { background: #fef2f2; }
+.btn-discard { background: #fff; border-color: #999; color: #666; }
+.btn-discard:hover { background: #f5f5f5; }
+.btn-restore { background: #fff; border-color: #059669; color: #059669; }
+.btn-restore:hover { background: #ecfdf5; }
+.btn-link { background: #fff; border-color: #d1d5db; color: #374151; }
+.btn-link:hover { background: #f9fafb; }
+
+#sidebar-footer { padding: 10px 16px; border-top: 1px solid #e0e0e0; display: flex; justify-content: space-between; align-items: center; }
+#unit-summary { font-size: 13px; color: #888; font-weight: 400; }
+#unit-count { font-weight: 700; color: #2563eb; }
+#conflict-warn { font-size: 11px; color: #dc2626; font-weight: 600; display: none; }
+
+/* ── Grid ── */
+#main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+#grid-header { background: #fff; border-bottom: 1px solid #e0e0e0; padding: 10px 0 0; }
+#grid-title { padding: 0 16px 8px; font-size: 14px; font-weight: 700; }
+
+#grid-wrap { flex: 1; overflow: auto; }
+#grid { display: grid; grid-template-columns: 52px repeat(7, 1fr); position: relative; }
+
+.day-header { text-align: center; padding: 6px 4px; font-size: 12px; font-weight: 600; color: #444; background: #fff; border-bottom: 1px solid #e0e0e0; position: sticky; top: 0; z-index: 5; }
+.day-header.weekend { color: #888; background: #fafafa; }
+.time-col-header { background: #fff; border-bottom: 1px solid #e0e0e0; position: sticky; top: 0; z-index: 5; }
+
+.day-col { position: relative; border-left: 1px solid #ebebeb; }
+.day-col.weekend { background: #fafafa; }
+.time-col { }
+
+.hour-row { height: 60px; border-bottom: 1px solid #f0f0f0; position: relative; }
+.hour-label { position: absolute; top: -8px; right: 6px; font-size: 10px; color: #aaa; white-space: nowrap; }
+.half-line { position: absolute; top: 30px; left: 0; right: 0; border-top: 1px dashed #f0f0f0; }
+
+.grid-col-inner { position: relative; }
+.course-block {
+  position: absolute; left: 2px; right: 2px;
+  border-radius: 5px; padding: 3px 5px;
+  font-size: 10.5px; line-height: 1.3; overflow: hidden;
+  border: 1px solid rgba(0,0,0,.1);
+  cursor: pointer; transition: filter .15s;
+}
+.course-block:hover { filter: brightness(.92); }
+.course-block .block-id { font-weight: 700; font-size: 10px; }
+.course-block .block-name { font-size: 10px; opacity: .9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.course-block .block-time { font-size: 9.5px; opacity: .75; }
+.course-block.conflict { outline: 2px solid #ef4444; }
+.conflict-badge { position: absolute; top: 2px; right: 2px; font-size: 9px; background: #ef4444; color: #fff; border-radius: 3px; padding: 0 3px; }
+
+.no-sched-section { margin-top: 4px; padding: 8px 12px; background: #fafafa; border-top: 1px solid #eee; }
+.no-sched-label { font-size: 11px; color: #999; margin-bottom: 6px; font-style: italic; }
+</style>
+</head>
+<body>
+
+<aside id="sidebar">
+  <div id="sidebar-header">
+    <h1>Fall 2026 FTMBA Electives</h1>
+    <input id="search" type="search" placeholder="Search course, name, instructor…">
+    <div class="tabs">
+      <div class="tab active" data-tab="all">All</div>
+      <div class="tab" data-tab="active">Active</div>
+      <div class="tab" data-tab="discarded">Discarded</div>
+    </div>
+  </div>
+  <div id="course-list"></div>
+  <div id="sidebar-footer">
+    <span id="conflict-warn">⚠ Conflict detected</span>
+  </div>
+</aside>
+
+<main id="main">
+  <div id="grid-header">
+    <div id="grid-title">Weekly Schedule <span id="unit-summary">— <span id="unit-count">0</span> units selected</span></div>
+  </div>
+  <div id="grid-wrap">
+    <div id="grid"></div>
+  </div>
+</main>
+
+<script>
+const RAW_COURSES = [
+  {"course_num":"MBA212A-1","link":"https://docs.google.com/document/d/1vgGEC8Wu-o7CpO2viHn5K_AgZsAJGtcFoarDn1NnQsA/edit?tab=t.0","name":"Cleantech to Market","units":3,"instructors":"Luce, A., Martinez, A., Steel, B.","day":"W","time":"2:00PM-5:00PM","format":"15 weeks","dates":"8/26 - 12/9","cross_listed":"EWMBA","notes":null,"experiential":"Y","biz_tech":"Y","no_add_drop":"Y","certificate":"SB"},
+  {"course_num":"MBA223-1","link":"https://docs.google.com/document/d/1bAvQfOEcmwKfJgFBGtH_6CtqsfVOCyKpnIC5J9kTiDE/edit?usp=drive_link","name":"Corporate Financial Reporting","units":3,"instructors":"Paul,T.","day":"Th","time":"8:00AM-11:00AM","format":"15 weeks","dates":"8/27 - 12/10","cross_listed":null,"notes":null,"experiential":null,"biz_tech":null,"no_add_drop":null,"certificate":"N/A"},
+  {"course_num":"MBA233-1","link":"https://docs.google.com/document/d/1EO7-nsYjvikiNqqmbr6RVPR01AXRf-Jl1UFuwMG9jwk/edit?usp=drive_link","name":"Asset Management","units":3,"instructors":"Olesky,S.","day":"TTh","time":"2:00PM-3:30PM","format":"15 weeks","dates":"8/25 - 12/10","cross_listed":null,"notes":null,"experiential":null,"biz_tech":null,"no_add_drop":null,"certificate":"N/A"},
+  {"course_num":"MBA236G-1B","link":"https://docs.google.com/document/d/1fj-0FDm2LqjItN-kb25kIoXbqeA5n23j_R5i_XtFRxc/edit?usp=drive_link","name":"Designing Financial Models that Work","units":1,"instructors":"Herbert-Creek, J.","day":"W","time":"2:00PM-4:00PM","format":"7 Weeks","dates":"9/2 - 10/14","cross_listed":null,"notes":null,"experiential":null,"biz_tech":null,"no_add_drop":null,"certificate":"BA"},
+  {"course_num":"MBA236G-2B","link":"https://docs.google.com/document/d/1fj-0FDm2LqjItN-kb25kIoXbqeA5n23j_R5i_XtFRxc/edit?usp=drive_link","name":"Designing Financial Models that Work","units":1,"instructors":"Herbert-Creek, J.","day":"W","time":"4:00PM-6:00PM","format":"7 Weeks","dates":"9/2 - 10/14","cross_listed":null,"notes":null,"experiential":null,"biz_tech":null,"no_add_drop":null,"certificate":"BA"},
+  {"course_num":"MBA236I-1","link":"https://docs.google.com/document/d/1yBBjrge05gNwtxMwNSL3KGcupN0Nfz6_vM5Bcusyh_o/edit?tab=t.0","name":"Fixed Income","units":2,"instructors":"Ananthaswamy, S.","day":"Th","time":"6:00PM-9:30PM","format":"10 Weeks","dates":"8/27 - 11/5","cross_listed":"EWMBA","notes":null,"experiential":null,"biz_tech":null,"no_add_drop":null,"certificate":"N/A"},
+  {"course_num":"MBA236L-1F","link":"https://docs.google.com/document/d/1PpGLOtZpUW9ikEqx2MSoF6fm4cYx0cmhdqaW2z5wE_o/edit?tab=t.0","name":"Private Equity Leveraged Buyouts","units":2,"instructors":"Hellmer, N., Hirji, A.","day":"Th","time":"2:00PM-5:00PM","format":"10 Weeks","dates":"8/27 - 11/19","cross_listed":"EWMBA","notes":"Online","experiential":null,"biz_tech":null,"no_add_drop":null,"certificate":"N/A"},
+  {"course_num":"MBA236V-1","link":"https://docs.google.com/document/d/1RzxA0vfuusnRINjlOWfHlHYN60N-BaA_ot-SFw9bsgE/edit?tab=t.0","name":"New Venture Finance","units":2,"instructors":"O'Neill,M.","day":"Th","time":"6:00PM-9:30PM","format":"10 Weeks","dates":"8/27 - 11/5","cross_listed":"EWMBA","notes":null,"experiential":null,"biz_tech":null,"no_add_drop":null,"certificate":"N/A"},
+  {"course_num":"MBA237-1","link":"https://docs.google.com/document/d/13egKRmRhDyboI-wZZTBsa8goT8K-MXLxrivPKIpb9rk/edit?usp=drive_link","name":"Valuation Models","units":1,"instructors":"Herbert-Creek, J.","day":"M","time":"2:00PM-4:00PM","format":"7 Weeks","dates":"8/31 - 10/19","cross_listed":null,"notes":null,"experiential":null,"biz_tech":null,"no_add_drop":null,"certificate":"BA"},
+  {"course_num":"MBA237-11","link":"https://docs.google.com/document/d/1LfRU3aM6xovofTNR0UE5EyScg4V0h-wb5sKPuHZWmC4/edit?tab=t.0","name":"Search Funds","units":1,"instructors":"Simon, J.","day":"Su","time":"9:00AM-5:00PM","format":"2 Sundays","dates":"10/25 & 11/1","cross_listed":"EWMBA","notes":null,"experiential":null,"biz_tech":null,"no_add_drop":null,"certificate":"N/A"},
+  {"course_num":"MBA237.2","link":"https://docs.google.com/document/d/1nBzYo2BEHeUrhD8Ewa_e9Tt0p9KFTCECVTVW3PiQjFg/edit?usp=sharing","name":"Venture Capital Law and Finance","units":3,"instructors":"Eldar, Ofer","day":"W","time":"10:00AM-12:40PM","format":"15 weeks","dates":"8/19 - 11/30","cross_listed":"LAW","notes":"Starts before other MBA electives. Cross-listed with Law school.","experiential":null,"biz_tech":null,"no_add_drop":null,"certificate":null},
+  {"course_num":"MBA240-1","link":"https://docs.google.com/document/d/1aj8nC8fVdbpGrUXYJB9stWNsLdB6bSTJt86UaVHXMX4/edit?tab=t.0","name":"Decision Models","units":2,"instructors":"Morgenstern, I.","day":"T","time":"6:00PM-9:30PM","format":"10 Weeks","dates":"8/25 - 10/27","cross_listed":"EWMBA","notes":null,"experiential":null,"biz_tech":null,"no_add_drop":null,"certificate":"AI, BA"},
+  {"course_num":"MBA246-11","link":"https://docs.google.com/document/d/1usEl8k5gIiNzjqhHdrEbS_fBDvoFqLk0cgiJBH09fZU/edit?tab=t.0","name":"Project Management","units":1,"instructors":"Romero-Hernandez, O.","day":"Su","time":"9:00AM-5:00PM","format":"2 Sundays","dates":"9/20 & 10/4","cross_listed":"EWMBA","notes":null,"experiential":null,"biz_tech":null,"no_add_drop":null,"certificate":"N/A"},
+  {"course_num":"MBA246-1B","link":"https://docs.google.com/document/d/1nt01_eWRX_L4Z-iOleDnm1Ug6X4ft_50vTvwNiimETU/edit?usp=drive_link","name":"Project Management Case Studies","units":1,"instructors":"Romero-Hernandez, O.","day":"M","time":"9:00AM-11:00AM","format":"7 Weeks","dates":"10/19 - 12/7","cross_listed":null,"notes":null,"experiential":null,"biz_tech":"Y","no_add_drop":null,"certificate":"N/A"},
+  {"course_num":"MBA247-1","link":"https://docs.google.com/document/d/1By0k0Zum2URozjhCBjFYYdbrfe0BwtgOTquNCSvtgKA/edit?tab=t.0","name":"Descriptive and Predictive Data Mining","units":2,"instructors":"Yang, L.","day":"W","time":"6:00PM-9:30PM","format":"10 Weeks","dates":"8/26 - 10/28","cross_listed":"EWMBA","notes":null,"experiential":null,"biz_tech":"Y","no_add_drop":null,"certificate":"AI, BA"},
+  {"course_num":"MBA251A-11F","link":"https://docs.google.com/document/d/1Jr0y8N3tevgBCSBS_PbjXC6rpocTgYfVvOkZeYknHNo/edit?tab=t.0","name":"People Analytics","units":2,"instructors":"Whiteman, H.","day":"S","time":"9:00AM-1:00PM","format":"Saturdays","dates":"9/19 - 10/31","cross_listed":"EWMBA","notes":"Online","experiential":null,"biz_tech":null,"no_add_drop":null,"certificate":"AI, BA"},
+  {"course_num":"MBA252-1","link":"https://docs.google.com/document/d/1aGZwQdwkz7fyr-xAaWg7nTBScSXXAB38ZnkgNnAKgw0/edit?usp=drive_link","name":"Negotiations and Conflict Resolution","units":2,"instructors":"Delecourt, S.","day":"W","time":"8:00AM-11:00AM","format":"10 Weeks","dates":"8/26 - 10/28","cross_listed":null,"notes":null,"experiential":null,"biz_tech":null,"no_add_drop":null,"certificate":"N/A"},
+  {"course_num":"MBA252-2","link":"https://docs.google.com/document/d/1aGZwQdwkz7fyr-xAaWg7nTBScSXXAB38ZnkgNnAKgw0/edit?usp=sharing","name":"Negotiations and Conflict Resolution","units":2,"instructors":"Delecourt, S.","day":"W","time":"2:00PM-5:00PM","format":"10 Weeks","dates":"8/26 - 10/28","cross_listed":null,"notes":null,"experiential":null,"biz_tech":null,"no_add_drop":null,"certificate":"N/A"},
+  {"course_num":"MBA254-1A","link":"https://docs.google.com/document/d/1c-VOEAtDrHedm54Ygvp9MfQMqkrsYSEP-4-0rPL9YhQ/edit?usp=drive_link","name":"Power and Politics in Organizations","units":2,"instructors":"Anderson, C.","day":"MW","time":"2:00PM-4:00PM","format":"7 Weeks","dates":"8/24 - 10/14","cross_listed":null,"notes":null,"experiential":null,"biz_tech":null,"no_add_drop":null,"certificate":"N/A"},
+  {"course_num":"MBA254-2A","link":"https://docs.google.com/document/d/1c-VOEAtDrHedm54Ygvp9MfQMqkrsYSEP-4-0rPL9YhQ/edit?usp=drive_link","name":"Power and Politics in Organizations","units":2,"instructors":"Anderson, C.","day":"MW","time":"4:00PM-6:00PM","format":"7 Weeks","dates":"8/24 - 10/14","cross_listed":null,"notes":null,"experiential":null,"biz_tech":null,"no_add_drop":null,"certificate":"N/A"},
+  {"course_num":"MBA256-1","link":"https://docs.google.com/document/d/1FU3Rv5PhHkAWTcFP1gi1YejNISHemnuInjTseRmXw2s/edit?tab=t.0","name":"Global Leadership","units":3,"instructors":"Gundling, E., Hischier, W.","day":"Th","time":"6:00PM-9:30PM","format":"10 Weeks","dates":"8/27 - 12/17","cross_listed":"EWMBA","notes":null,"experiential":null,"biz_tech":null,"no_add_drop":null,"certificate":"N/A"},
+  {"course_num":"MBA266-1","link":"https://docs.google.com/document/d/1SbuPekoKA0HEwzO5ufnW5UEXFLNFDBt6VjNh-k85QiI/edit?tab=t.0","name":"Sales Force Management and Channel Strategy","units":3,"instructors":"Azhar, W.","day":"M","time":"6:00PM-9:30PM","format":"15 weeks","dates":"8/24 - 12/7","cross_listed":"EWMBA","notes":null,"experiential":null,"biz_tech":null,"no_add_drop":null,"certificate":"N/A"},
+  {"course_num":"MBA271-1","link":"https://docs.google.com/document/d/1pGqxiv2taYNJJzjEVbh5c1DcUe3WdVSKEuGA96m2ke4/edit?usp=drive_link","name":"Tech and the City: How to Get Urban Innovation Right","units":3,"instructors":"Turner, M.","day":"TTh","time":"11:00AM-12:30PM","format":"15 weeks","dates":"8/25 - 12/10","cross_listed":null,"notes":null,"experiential":null,"biz_tech":"Y","no_add_drop":null,"certificate":"AI"},
+  {"course_num":"MBA277-12","link":"https://docs.google.com/document/d/1GWt6aLcfrd1poXoYqc4Bi2Mx6n4y5-1d6K8UrEWRcEw/edit?tab=t.0","name":"Disruption Futures","units":2,"instructors":"Groth, O.","day":"S","time":"9:00AM-1:00PM","format":"Saturdays","dates":"8/29 - 10/17","cross_listed":"EWMBA","notes":null,"experiential":null,"biz_tech":null,"no_add_drop":null,"certificate":"AI"},
+  {"course_num":"MBA282-1","link":"https://docs.google.com/document/d/18DTGyI1LAwwt5DYqXV8FkfjxAgar83CduhrfbzaXu6c/edit?tab=t.0","name":"Real Estate Development","units":3,"instructors":"Williams, D.","day":"M","time":"6:00PM-9:30PM","format":"15 weeks","dates":"8/24 - 12/7","cross_listed":"EWMBA","notes":null,"experiential":null,"biz_tech":null,"no_add_drop":null,"certificate":"RE"},
+  {"course_num":"MBA283-1","link":"https://docs.google.com/document/d/16MKyJ_g4-8xM1Sj5eX6L-H2hZEgaLTnn026pAEgc5kc/edit?tab=t.0","name":"Real Estate Finance and Securitization","units":3,"instructors":"Bordeu Gazmuri, O.","day":"T","time":"6:00PM-9:30PM","format":"15 weeks","dates":"9/1 - 12/8","cross_listed":"EWMBA","notes":null,"experiential":null,"biz_tech":null,"no_add_drop":null,"certificate":"RE"},
+  {"course_num":"MBA287-1","link":"https://docs.google.com/document/d/1_BR8zJkTmUQCTR8lIQ9Ziq8196q8noGqLnTt6C5yURs/edit?tab=t.0","name":"Finding Your Place in Real Estate","units":1,"instructors":"Franklin, A.","day":"T","time":"4:00PM-6:00PM","format":"7 Weeks","dates":"10/13 - 12/15","cross_listed":"EWMBA","notes":null,"experiential":null,"biz_tech":null,"no_add_drop":null,"certificate":"N/A"},
+  {"course_num":"MBA290N-1","link":"https://docs.google.com/document/d/17NdO_i4TDPRsMOf-m_IlN8Ht66lVAZnlSdn7sNYEOfo/edit?usp=drive_link","name":"Managing the New Product Development Process","units":3,"instructors":"Law, V.","day":"TTh","time":"11:00AM-12:30PM","format":"15 weeks","dates":"8/25 - 12/10","cross_listed":null,"notes":null,"experiential":"Y","biz_tech":"Y","no_add_drop":null,"certificate":"AI"},
+  {"course_num":"MBA290T-11","link":"https://docs.google.com/document/d/1_tdVzbkDbqpiGm71BUPdLYJ46bAZY_DdCYCpzh5uMmY/edit?usp=drive_link","name":"From Query to Insights: Analytics with SQL & AI Assistants","units":1,"instructors":"Varier, R.","day":"Su","time":"9:00AM-5:00PM","format":"2 Sundays","dates":"10/18 & 11/8","cross_listed":null,"notes":null,"experiential":null,"biz_tech":null,"no_add_drop":null,"certificate":"AI, BA"},
+  {"course_num":"MBA290T-13","link":"https://docs.google.com/document/d/1bKHcc0H1pzanl21MpfC_K15CJvVGgZxfKqywoHNia54/edit?tab=t.0","name":"AI-powered PM Crash Course","units":1,"instructors":"Law, V.","day":"Su","time":"9:00AM-5:00PM","format":"2 Sundays","dates":"11/1 & 11/22","cross_listed":"EWMBA","notes":null,"experiential":null,"biz_tech":null,"no_add_drop":null,"certificate":"AI"},
+  {"course_num":"MBA290T.14","link":"https://docs.google.com/document/d/1GP9KjP7h8M3LQkosUD5LqcTbekuCHNKM2k0wMabLvdM/edit?usp=sharing","name":"AI Workflow Automation for Business Leaders","units":1,"instructors":"Varier, Roopesh","day":"Su","time":"9:00AM-5:00PM","format":"2 Sundays","dates":"10/25 & 11/15","cross_listed":null,"notes":"New course!","experiential":null,"biz_tech":null,"no_add_drop":null,"certificate":null},
+  {"course_num":"MBA290T-2","link":"https://docs.google.com/document/d/137xDeKqJyO8bDnEJJ808jQMk9ncs_Bb5FLmZEVMD3WU/edit?usp=drive_link","name":"Social Impact Strategy in Commercial Tech","units":2,"instructors":"Rosenzweig, A.","day":"Th","time":"2:00PM-4:00PM","format":"15 Weeks","dates":"8/27 - 12/10","cross_listed":null,"notes":null,"experiential":"Y","biz_tech":null,"no_add_drop":null,"certificate":"N/A"},
+  {"course_num":"MBA291E-11F","link":"https://docs.google.com/document/d/17kNz8d-MIDsNRodN03BRf7QCHMcR6F4iDMTIdMzMsW0/edit?tab=t.0","name":"The Neuroscience of Communication and Embodied Leadership","units":2,"instructors":"Peng, E.","day":"FFSSu","time":"9:55AM-6:00PM","format":"Unique","dates":"10/30, 11/6-11/7, 11/13","cross_listed":"EWMBA","notes":"Online; Unique schedule. Review the course description.","experiential":null,"biz_tech":null,"no_add_drop":null,"certificate":"N/A"},
+  {"course_num":"MBA291F-11","link":"https://docs.google.com/document/d/1_-6CLd5zjVHki4mj_t8N0I1iTG1BBEpubeHzPHMkRDo/edit?usp=drive_link","name":"Audience-Focused Communication","units":1,"instructors":"Leipzig, A.","day":"S","time":"9:00AM-5:00PM","format":"2 Saturdays","dates":"10/17 & 10/31","cross_listed":null,"notes":null,"experiential":null,"biz_tech":null,"no_add_drop":null,"certificate":"N/A"},
+  {"course_num":"MBA291R-11","link":"https://docs.google.com/document/d/1ICPaki04baywqacGfklRTvDeXXxPc1pvtJa09HRZeAI/edit?tab=t.0","name":"Building Trust-Based Relationships","units":1,"instructors":"Ball, R., Caleshu, J.","day":"Su","time":"9:00AM-5:00PM","format":"2 Sundays","dates":"10/4 & 10/25","cross_listed":"EWMBA","notes":null,"experiential":null,"biz_tech":null,"no_add_drop":null,"certificate":"N/A"},
+  {"course_num":"MBA291S-1A","link":"https://docs.google.com/document/d/185HPi93Y9iAxvAaZ_OD2DKxkJVmkyJVqV4-5Ktink7Y/edit?usp=drive_link","name":"Storytelling for Leadership","units":1,"instructors":"Fitzpatrick, T.","day":"T","time":"2:00PM-5:00PM","format":"5 Weeks","dates":"9/15 - 10/13","cross_listed":null,"notes":null,"experiential":null,"biz_tech":null,"no_add_drop":null,"certificate":"N/A"},
+  {"course_num":"MBA292B-11","link":"https://docs.google.com/document/d/1y_XqEoBOTur0H4pdDt0hzxxrD2Z5St9QrQSYNd7C0JM/edit?tab=t.0","name":"Nonprofit Boards","units":1,"instructors":"Heinrich, L.","day":"Su","time":"9:00AM-5:00PM","format":"2 Sundays","dates":"10/25 & 11/15","cross_listed":"EWMBA","notes":null,"experiential":null,"biz_tech":null,"no_add_drop":null,"certificate":"N/A"},
+  {"course_num":"MBA292C-1F","link":"https://docs.google.com/document/d/1TqwluefVShfpwnJ87D_D0Wfdia0uZFjdqvkgI6Fx_cQ/edit?tab=t.0","name":"Strategic and Sustainable Business Solutions","units":3,"instructors":"Radovich, A.; Ruben, A.","day":"T","time":"6:00PM-9:30PM","format":"15 weeks","dates":"8/25 - 12/8","cross_listed":"EWMBA","notes":"Online","experiential":"Y","biz_tech":null,"no_add_drop":null,"certificate":"SB"},
+  {"course_num":"MBA292ID-11","link":"https://docs.google.com/document/d/1gXkgxYMArQ_HURUSAgXgcCaq65Xfmn2r5mS6zTChOjc/edit?tab=t.0","name":"Impact Startup Disco","units":1,"instructors":"Calderon, J.","day":"FSSu","time":"10AM-9:00PM","format":"Full weekend","dates":"10/2 - 10/4","cross_listed":"EWMBA","notes":"Unique schedule. Review the course description.","experiential":null,"biz_tech":"Y","no_add_drop":null,"certificate":"N/A"},
+  {"course_num":"MBA292K-1","link":"https://docs.google.com/document/d/1avVhsEfA-OWx0Yd8cJNeYeZ9APIo4SDUvef1OU7N-fI/edit?usp=drive_link","name":"Food Innovation Studio","units":2,"instructors":"Rosenzweig, W., Pahuja, S.","day":"T","time":"6:00PM-8:00PM","format":"15 weeks","dates":"8/25 - 12/8","cross_listed":null,"notes":null,"experiential":"Y","biz_tech":null,"no_add_drop":null,"certificate":"SB"},
+  {"course_num":"MBA292M-1","link":"https://docs.google.com/document/d/1BhvfiCytiTzZ2BkvsI5AdAE5pYpiQAHycAHolrkGrXA/edit?usp=drive_link","name":"Social Impact Metrics","units":2,"instructors":"Boyle, C.","day":"T","time":"4:00PM-6:00PM","format":"15 Weeks","dates":"8/25 - 12/8","cross_listed":null,"notes":null,"experiential":null,"biz_tech":null,"no_add_drop":null,"certificate":"BA"},
+  {"course_num":"MBA292T-1","link":"https://docs.google.com/document/d/12pbC9k5e98cUB3AA0uf0GWPK8vnuggqKvYNgRqNITFM/edit?usp=drive_link","name":"Systems Change for a Small Planet","units":3,"instructors":"Madsen, K., Rosenzweig, W.","day":"T","time":"2:00PM-5:00PM","format":"15 weeks","dates":"8/25 - 12/8","cross_listed":null,"notes":null,"experiential":null,"biz_tech":null,"no_add_drop":null,"certificate":"SB"},
+  {"course_num":"MBA292T-12F","link":"https://docs.google.com/document/d/1gfFTLyP7fp-pCg61eHXMOQDGFLGBGW7ZCBslQynvx28/edit?tab=t.0","name":"Responsible Management in Crisis","units":2,"instructors":"Chan, A.","day":"W","time":"6:00PM-8:00PM","format":"10 weeks","dates":"8/26 - 10/28","cross_listed":"EWMBA","notes":"Online","experiential":null,"biz_tech":null,"no_add_drop":null,"certificate":"N/A"},
+  {"course_num":"MBA292T-13","link":"https://docs.google.com/document/d/1MN1rK2VClMC6DvFZ6gys51wx9J_bDgkUGtV5wOCuZ6E/edit?tab=t.0","name":"Impact Investing Landscape","units":1,"instructors":"Butler, R., Lai, J.","day":"Su","time":"9:00AM-5:00PM","format":"2 Sundays","dates":"9/20 & 10/18","cross_listed":"EWMBA","notes":null,"experiential":null,"biz_tech":null,"no_add_drop":null,"certificate":"SB"},
+  {"course_num":"MBA292T-2","link":"https://docs.google.com/document/d/1bUPXDYF51DnDCqiJqwVraSN8Mb7-1VpazMWq0CuKy8k/edit?tab=t.0","name":"Climate Change and Business Strategy","units":3,"instructors":"Romero-Hernandez, O.","day":"M","time":"6:00PM-9:30PM","format":"15 weeks","dates":"8/24 - 12/14","cross_listed":"EWMBA","notes":null,"experiential":null,"biz_tech":"Y","no_add_drop":null,"certificate":"SB"},
+  {"course_num":"MBA292T-4","link":"https://docs.google.com/document/d/15g7W_H5oi_ubylIUbZSa4VEt0nRQtbJNEz87Ie0B6Rk/edit?usp=drive_link","name":"Plant Futures Challenge Lab","units":3,"instructors":"Sartor, B., Schinner, M.","day":"MW","time":"4:30PM-6:00PM","format":"15 weeks","dates":"8/24 - 12/9","cross_listed":"UGBA","notes":"Cross-listed with Haas undergrad; enroll in MBA section.","experiential":"Y","biz_tech":null,"no_add_drop":null,"certificate":"SB"},
+  {"course_num":"MBA292T-5","link":"https://docs.google.com/document/d/1fYUaMtW6hYJS0ZI5FaSsfQRXfZV4kTcGL22rYVI91vk/edit?tab=t.0","name":"Business Models for Social Impact","units":3,"instructors":"Groos Richmond, K., Lee, G.","day":"W","time":"6:00PM-9:30PM","format":"15 weeks","dates":"8/26 - 12/9","cross_listed":"EWMBA","notes":null,"experiential":null,"biz_tech":null,"no_add_drop":null,"certificate":"SB"},
+  {"course_num":"MBA292T-6","link":"https://docs.google.com/document/d/17Sg_0QmeuVfLOrSjBCIMTi8YsN0vH5timeih7ZecCIs/edit?usp=drive_link","name":"Difficult Conversations: Conflict Lab","units":2,"instructors":"LeBaron, F.","day":"Th","time":"2:00PM-5:00PM","format":"10 Weeks","dates":"8/27 - 10/29","cross_listed":null,"notes":null,"experiential":null,"biz_tech":null,"no_add_drop":null,"certificate":"N/A"},
+  {"course_num":"MBA292T-7","link":"https://docs.google.com/document/d/1vneQqBhPcQLsrm1hjQE5fhr8b3wwmwMRlZ87n1JeovY/edit?tab=t.0","name":"Climate Solutions Fund","units":3,"instructors":"Evans, T.","day":"MW","time":"4:00PM-6:00PM","format":"15 weeks","dates":"8/24 - 11/18","cross_listed":"EWMBA","notes":"Unique schedule. Review the course description.","experiential":"Y","biz_tech":null,"no_add_drop":null,"certificate":"SB"},
+  {"course_num":"MBA292T-8","link":"https://docs.google.com/document/d/12GEPkpjzl4o4juUNxxkCe5K43ZS0WYn5kBF1aHQyVHs/edit?usp=drive_link","name":"The Business of Energy Transition","units":2,"instructors":"Gordon, Kate","day":"Th","time":"4:00PM-6:00PM","format":"15 weeks","dates":"8/26 - 12/10","cross_listed":null,"notes":"New course!","experiential":null,"biz_tech":null,"no_add_drop":null,"certificate":"N/A"},
+  {"course_num":"MBA292T-9","link":"https://docs.google.com/document/d/1YFDkZQNbPlodM5u7iC8lKO8XPdV__JfJX3y4nD6a3BQ/edit?usp=drive_link","name":"Large-Scale Social Change: Social Movements","units":2,"instructors":"Nagai-Ma, S.","day":"T","time":"2:00PM-4:00PM","format":"15 Weeks","dates":"8/25 - 12/8","cross_listed":null,"notes":null,"experiential":null,"biz_tech":null,"no_add_drop":null,"certificate":"N/A"},
+  {"course_num":"MBA295A-1F","link":"https://docs.google.com/document/d/1awWyMdK79TyUXNyF1BnRG9JNdYJt1ca_SgnFsmJ0iH0/edit?tab=t.0","name":"Entrepreneurship","units":3,"instructors":"Beyer, K., Somasundaram, S.","day":"Th","time":"6:00PM-9:30PM","format":"15 weeks","dates":"8/27 - 12/10","cross_listed":"EWMBA","notes":"Online","experiential":"Y","biz_tech":"Y","no_add_drop":null,"certificate":"AI"},
+  {"course_num":"MBA295B-1","link":"https://docs.google.com/document/d/1d6tn8hPL0tLYsM4nY8ngvcwklijy3DBo3wsNpp1XegU/edit?tab=t.0","name":"Venture Capital & Private Equity","units":3,"instructors":"Foote, C., Maltz, J.","day":"W","time":"6:00PM-9:30PM","format":"15 weeks","dates":"8/26 - 12/9","cross_listed":"EWMBA","notes":null,"experiential":null,"biz_tech":null,"no_add_drop":null,"certificate":"N/A"},
+  {"course_num":"MBA295C-1F","link":"https://docs.google.com/document/d/1OcCQUu-EPjjsajzNAL7HGsA6aqNuO0VSse1y7qMfz90/edit?tab=t.0","name":"Opportunity Recognition: Technology and Entrepreneurship in Silicon Valley","units":2,"instructors":"Metzler, J.","day":"M","time":"4:00PM-6:00PM","format":"15 weeks","dates":"8/24 - 12/7","cross_listed":"EWMBA","notes":"Online","experiential":null,"biz_tech":"Y","no_add_drop":null,"certificate":"AI"},
+  {"course_num":"MBA295T-1","link":"https://docs.google.com/document/d/1g_HoGs_E_SJDNgiLabVpnO-KIJHxS8LkL54oZCMch6c/edit?tab=t.0","name":"Bay Area Innovation and Entrepreneurship","units":2,"instructors":"Charron, D., Foote, C.","day":"MTWThF","time":"9:00AM-5:00PM","format":"Block Week","dates":"10/19 - 10/23","cross_listed":"EWMBA","notes":null,"experiential":null,"biz_tech":null,"no_add_drop":null,"certificate":"N/A"},
+  {"course_num":"MBA295T-11","link":"https://docs.google.com/document/d/1Kvk1GEWRLL3fjdJ4rWphRNIy5IbSdrzdpU47rG5mQmc/edit?tab=t.0","name":"Startup Disco","units":1,"instructors":"Shrader, R.","day":"FSSu","time":"4:30PM-9:00PM","format":"Full weekend","dates":"9/11 - 9/13","cross_listed":"EWMBA","notes":null,"experiential":null,"biz_tech":null,"no_add_drop":null,"certificate":"N/A"},
+  {"course_num":"MBA295T-2","link":"https://docs.google.com/document/d/1ANWAtaPUmFWJvVe-z9kuKwwEJR92gUv8NbgJCBckwSM/edit?usp=drive_link","name":"Lean Transfer","units":2,"instructors":"Ruparel, A., Shrader, R.","day":"Th","time":"4:00PM-6:00PM","format":"15 Weeks","dates":"8/27 - 12/10","cross_listed":null,"notes":null,"experiential":"Y","biz_tech":null,"no_add_drop":null,"certificate":"N/A"},
+  {"course_num":"MBA295T-3","link":"https://docs.google.com/document/d/1jtAt7fZwi1DjrkRCT6WQWCGY-wHMYfw3iO6lrzKLQaU/edit?usp=drive_link","name":"Startup Sales","units":2,"instructors":"Wadcan, J.","day":"W","time":"2:00PM-4:00PM","format":"15 Weeks","dates":"8/26 - 12/9","cross_listed":null,"notes":null,"experiential":null,"biz_tech":null,"no_add_drop":null,"certificate":"N/A"},
+  {"course_num":"MBA296-11","link":"https://docs.google.com/document/d/1Y6NKsYHcA04g7sKpJL2id53QyhKl4u2FyJMHZDTyIYs/edit?tab=t.0","name":"Life Sciences Marketing","units":1,"instructors":"Ford, J.","day":"Su","time":"9:00AM-5:00PM","format":"2 Sundays","dates":"9/13 & 9/27","cross_listed":"EWMBA","notes":null,"experiential":null,"biz_tech":"Y","no_add_drop":null,"certificate":"N/A"},
+  {"course_num":"MBA296-1F","link":"https://docs.google.com/document/d/16vcW1cIjqe429jqBjnYoJmUFJcXYv_Gj8P4zW1wT568/edit?tab=t.0","name":"Strategically Managing Healthcare Policy - Washington Campus","units":2,"instructors":"Macpherson, K.","day":"MTWThF","time":"7:00AM-2:00PM","format":"Block Week","dates":"11/8, 11/16-11/20, 12/6","cross_listed":"EWMBA","notes":"Online","experiential":null,"biz_tech":null,"no_add_drop":null,"certificate":"N/A"},
+  {"course_num":"MBA296-3","link":"https://docs.google.com/document/d/117Tg3U9iJnNJRUI6B_eZoWrlayd9N6XqU4Fq4IXeZSs/edit?usp=drive_link","name":"Human-Centered AI-Powered Presentations","units":1,"instructors":"Charnsupharindr, D.","day":"M","time":"2:00PM-4:00PM","format":"7 Weeks","dates":"10/19 - 12/7","cross_listed":null,"notes":null,"experiential":null,"biz_tech":null,"no_add_drop":null,"certificate":"N/A"},
+  {"course_num":"MBA296-4","link":"https://docs.google.com/document/d/1wmbLaTuIpjgI8kIzuMmc9WxXsKAnNzsfEGDLsSEwpsI/edit?usp=drive_link","name":"Data Analytics","units":2,"instructors":"Miller, C.","day":"T","time":"2:00PM-5:00PM","format":"10 weeks","dates":"8/25 - 11/3","cross_listed":null,"notes":null,"experiential":null,"biz_tech":null,"no_add_drop":null,"certificate":"AI, BA"},
+  {"course_num":"MBA296-5","link":"https://docs.google.com/document/d/1Lu1HaTmZrFFnwEnQitRGhHpn85K9dox2nnz36IAWvvM/edit?usp=drive_link","name":"The Business of Women's Sports","units":2,"instructors":"McElhaney,K.","day":"M","time":"4:00PM-6:00PM","format":"15 Weeks","dates":"8/24 - 12/7","cross_listed":null,"notes":"New course!","experiential":null,"biz_tech":null,"no_add_drop":null,"certificate":"N/A"},
+  {"course_num":"MBA296C-1","link":"https://docs.google.com/document/d/1m-BXRJhm7MkSJJZ2cLGgikrfoXcGIBE9PmeSCTw9dqU/edit?usp=sharing","name":"Introduction to Coding for MBAs","units":2,"instructors":"Wadcan, J.","day":"W","time":"4:00PM-6:00PM","format":"15 Weeks","dates":"8/26 - 12/9","cross_listed":null,"notes":null,"experiential":null,"biz_tech":null,"no_add_drop":null,"certificate":"AI"},
+  {"course_num":"MBA297A-1","link":"https://docs.google.com/document/d/1r1K1uevMUYVc0vAwf7VpDJf8k6vxXIk8BYJjjVETsGo/edit?usp=drive_link","name":"Healthcare in the 21st Century","units":3,"instructors":"Macpherson, K.","day":"MW","time":"11:00AM-12:30PM","format":"15 weeks","dates":"8/24 - 12/9","cross_listed":null,"notes":null,"experiential":null,"biz_tech":"Y","no_add_drop":null,"certificate":"N/A"},
+  {"course_num":"MBA299M-1","link":"https://docs.google.com/document/d/1yz81Pm-mg68oD5RCQEZbIuaSgMsAVpuFpi4bgJwFk04/edit?usp=drive_link","name":"Marketing Strategy","units":3,"instructors":"Villas-Boas, J. M.","day":"MW","time":"11:00AM-12:30PM","format":"15 weeks","dates":"8/24 - 12/9","cross_listed":null,"notes":null,"experiential":null,"biz_tech":null,"no_add_drop":null,"certificate":"N/A"},
+  {"course_num":"MBA209F-1","link":null,"name":"Fundamentals of Business","units":3,"instructors":"Brooks, R.; Mulhern, D.; Brady, J.","day":null,"time":null,"format":null,"dates":null,"cross_listed":null,"notes":"Campus course — not in bidding, add/drop via CalCentral.","experiential":null,"biz_tech":null,"no_add_drop":null,"certificate":null},
+  {"course_num":"MBA209P-1","link":null,"name":"Personal Financial Management","units":2,"instructors":"Odean, T.; Shaye, R.","day":null,"time":null,"format":null,"dates":null,"cross_listed":null,"notes":"Campus course — not in bidding, add/drop via CalCentral.","experiential":null,"biz_tech":null,"no_add_drop":null,"certificate":null},
+  {"course_num":"MBA209P-2","link":null,"name":"Personal Financial Management","units":2,"instructors":"Odean, T.; Shaye, R.","day":null,"time":null,"format":null,"dates":null,"cross_listed":null,"notes":"Campus course — not in bidding, add/drop via CalCentral.","experiential":null,"biz_tech":null,"no_add_drop":null,"certificate":null},
+  {"course_num":"MBA209P-3","link":null,"name":"Personal Financial Management","units":2,"instructors":"Odean, T.; Shaye, R.","day":null,"time":null,"format":null,"dates":null,"cross_listed":null,"notes":"Campus course — not in bidding, add/drop via CalCentral.","experiential":null,"biz_tech":null,"no_add_drop":null,"certificate":null},
+  {"course_num":"UGBA10x-1","link":null,"name":"UGBA10x Lab – Section 1","units":null,"instructors":null,"slots":[{"day":"M","time":"12:30PM-1:30PM"},{"day":"T","time":"10:00AM-12:00PM"}],"format":null,"dates":null,"cross_listed":null,"notes":null,"experiential":null,"biz_tech":null,"no_add_drop":null,"certificate":null},
+  {"course_num":"UGBA10x-2","link":null,"name":"UGBA10x Lab – Section 2","units":null,"instructors":null,"slots":[{"day":"M","time":"12:30PM-1:30PM"},{"day":"T","time":"12:00PM-2:00PM"}],"format":null,"dates":null,"cross_listed":null,"notes":null,"experiential":null,"biz_tech":null,"no_add_drop":null,"certificate":null},
+  {"course_num":"UGBA10x-3","link":null,"name":"UGBA10x Lab – Section 3","units":null,"instructors":null,"slots":[{"day":"M","time":"12:30PM-1:30PM"},{"day":"T","time":"2:00PM-4:00PM"}],"format":null,"dates":null,"cross_listed":null,"notes":null,"experiential":null,"biz_tech":null,"no_add_drop":null,"certificate":null},
+  {"course_num":"UGBA10x-4","link":null,"name":"UGBA10x Lab – Section 4","units":null,"instructors":null,"slots":[{"day":"M","time":"12:30PM-1:30PM"},{"day":"W","time":"8:00AM-10:00AM"}],"format":null,"dates":null,"cross_listed":null,"notes":null,"experiential":null,"biz_tech":null,"no_add_drop":null,"certificate":null}
+];
+
+// ── Constants ──
+const DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+const DAY_MAP = {
+  'M':[0],'T':[1],'W':[2],'Th':[3],'F':[4],'S':[5],'Su':[6],
+  'TTh':[1,3],'MW':[0,2],'MTWThF':[0,1,2,3,4],
+  'FSSu':[4,5,6],'FFSSu':[4,5,6]
+};
+const GRID_START = 7;   // 7 AM
+const GRID_END   = 22;  // 10 PM
+const PX_PER_HR  = 60;
+
+const PALETTE = [
+  {bg:'#dbeafe',border:'#3b82f6',text:'#1e3a8a'},
+  {bg:'#dcfce7',border:'#22c55e',text:'#14532d'},
+  {bg:'#fef3c7',border:'#f59e0b',text:'#78350f'},
+  {bg:'#fce7f3',border:'#ec4899',text:'#831843'},
+  {bg:'#ede9fe',border:'#8b5cf6',text:'#4c1d95'},
+  {bg:'#cffafe',border:'#06b6d4',text:'#164e63'},
+  {bg:'#ffedd5',border:'#f97316',text:'#7c2d12'},
+  {bg:'#d1fae5',border:'#10b981',text:'#064e3b'},
+  {bg:'#fdf4ff',border:'#a855f7',text:'#581c87'},
+  {bg:'#fef9c3',border:'#eab308',text:'#713f12'},
+];
+
+// ── State ──
+let states = {}; // course_num → 'neutral'|'added'|'discarded'
+let colorMap = {}; // course_num → palette index
+let colorCounter = 0;
+let currentTab = 'all';
+let searchQuery = '';
+
+function loadState() {
+  try { states = JSON.parse(localStorage.getItem('cs_states') || '{}'); } catch(e) { states = {}; }
+  try { colorMap = JSON.parse(localStorage.getItem('cs_colors') || '{}'); } catch(e) { colorMap = {}; }
+  colorCounter = Object.keys(colorMap).length;
+}
+function saveState() {
+  localStorage.setItem('cs_states', JSON.stringify(states));
+  localStorage.setItem('cs_colors', JSON.stringify(colorMap));
+}
+function getState(id) { return states[id] || 'neutral'; }
+function setState(id, s) {
+  states[id] = s;
+  if (s === 'added' && colorMap[id] === undefined) {
+    colorMap[id] = colorCounter % PALETTE.length;
+    colorCounter++;
+  }
+  saveState();
+}
+function getColor(id) {
+  const idx = colorMap[id] !== undefined ? colorMap[id] : 0;
+  return PALETTE[idx];
+}
+
+// ── Data processing ──
+const COURSES = RAW_COURSES.filter(c => c.course_num && String(c.course_num).length < 30);
+
+function parseTime(t) {
+  if (!t) return null;
+  const m = t.match(/(\d+)(?::(\d+))?\s*(AM|PM)\s*-\s*(\d+)(?::(\d+))?\s*(AM|PM)/i);
+  if (!m) return null;
+  let sh=+m[1], sm=+(m[2]||0), sa=m[3].toUpperCase();
+  let eh=+m[4], em=+(m[5]||0), ea=m[6].toUpperCase();
+  let start = sh + sm/60;
+  let end   = eh + em/60;
+  if (sa==='PM' && sh!==12) start += 12;
+  if (ea==='PM' && eh!==12) end += 12;
+  if (sa==='AM' && sh===12) start = 0;
+  if (ea==='AM' && eh===12) end = 0;
+  return {start, end};
+}
+
+function parseDays(d) {
+  if (!d || String(d).length > 20) return [];
+  return DAY_MAP[d] || [];
+}
+
+// Returns [{day, time}] for every time slot the course meets
+function getCourseSlots(c) {
+  if (c.slots) return c.slots;
+  if (c.day && c.time) return [{day: c.day, time: c.time}];
+  return [];
+}
+function isScheduled(c) { return getCourseSlots(c).length > 0; }
+
+// ── Conflict detection ──
+function findConflicts() {
+  const added = COURSES.filter(c => getState(c.course_num) === 'added');
+  const conflicts = new Set();
+  for (let i = 0; i < added.length; i++) {
+    for (let j = i+1; j < added.length; j++) {
+      const a = added[i], b = added[j];
+      for (const sa of getCourseSlots(a)) {
+        for (const sb of getCourseSlots(b)) {
+          const da = parseDays(sa.day), db = parseDays(sb.day);
+          const ta = parseTime(sa.time), tb = parseTime(sb.time);
+          if (!ta || !tb) continue;
+          if (da.some(d => db.includes(d)) && ta.start < tb.end && tb.start < ta.end) {
+            conflicts.add(a.course_num);
+            conflicts.add(b.course_num);
+          }
+        }
+      }
+    }
+  }
+  return conflicts;
+}
+
+// ── Grid layout: side-by-side overlap ──
+function computeColumns(events) {
+  // events: [{id, start, end}], returns {id: {col, totalCols}}
+  const sorted = [...events].sort((a,b) => a.start - b.start || a.end - b.end);
+  const result = {};
+  const groups = [];
+  let curGroup = [], maxEnd = -Infinity;
+  for (const ev of sorted) {
+    if (curGroup.length && ev.start >= maxEnd) {
+      groups.push([...curGroup]); curGroup = []; maxEnd = -Infinity;
+    }
+    curGroup.push(ev);
+    maxEnd = Math.max(maxEnd, ev.end);
+  }
+  if (curGroup.length) groups.push(curGroup);
+  for (const grp of groups) {
+    grp.forEach((ev, i) => { result[ev.id] = {col: i, totalCols: grp.length}; });
+  }
+  return result;
+}
+
+// ── Render sidebar ──
+function renderSidebar() {
+  const q = searchQuery.toLowerCase();
+  const conflicts = findConflicts();
+
+  const scheduled = COURSES.filter(c => isScheduled(c));
+  const unscheduled = COURSES.filter(c => !isScheduled(c));
+
+  function matchesSearch(c) {
+    return !q || c.course_num.toLowerCase().includes(q)
+      || c.name.toLowerCase().includes(q)
+      || (c.instructors||'').toLowerCase().includes(q);
+  }
+  function matchesTab(c) {
+    const s = getState(c.course_num);
+    if (currentTab === 'active') return s !== 'discarded';
+    if (currentTab === 'discarded') return s === 'discarded';
+    return true;
+  }
+
+  const listEl = document.getElementById('course-list');
+  listEl.innerHTML = '';
+
+  // Scheduled courses
+  const visibleSched = scheduled.filter(c => matchesSearch(c) && matchesTab(c));
+  visibleSched.forEach(c => listEl.appendChild(makeCard(c, conflicts)));
+
+  // Unscheduled section
+  const visibleUnsched = unscheduled.filter(c => matchesSearch(c) && matchesTab(c));
+  if (visibleUnsched.length > 0) {
+    const sec = document.createElement('div');
+    sec.className = 'no-sched-section';
+    sec.innerHTML = `<div class="no-sched-label">No fixed schedule (campus courses)</div>`;
+    visibleUnsched.forEach(c => sec.appendChild(makeCard(c, conflicts)));
+    listEl.appendChild(sec);
+  }
+
+  // Unit count
+  const addedUnits = COURSES
+    .filter(c => getState(c.course_num) === 'added')
+    .reduce((sum, c) => sum + (c.units || 0), 0);
+  document.getElementById('unit-count').textContent = addedUnits;
+
+  // Conflict warning
+  const warnEl = document.getElementById('conflict-warn');
+  warnEl.style.display = conflicts.size > 0 ? 'inline' : 'none';
+  warnEl.textContent = conflicts.size > 0 ? `⚠ ${conflicts.size/2|0} conflict${conflicts.size>2?'s':''}` : '';
+}
+
+function makeCard(c, conflicts) {
+  const s = getState(c.course_num);
+  const color = getColor(c.course_num);
+  const hasConflict = conflicts.has(c.course_num);
+  const scheduled = isScheduled(c);
+
+  const div = document.createElement('div');
+  div.className = `card${s==='added'?' added':''}${s==='discarded'?' discarded':''}${!scheduled?' no-schedule':''}${hasConflict?' conflict-highlight':''}`;
+  if (s === 'added') {
+    div.style.setProperty('--course-color', color.border);
+    div.style.setProperty('--course-bg', color.bg);
+  }
+
+  const slots = getCourseSlots(c);
+  const timeStr = slots.map(s => `${s.day} · ${s.time}`).join('  /  ');
+  const certBadge = c.certificate && c.certificate !== 'N/A'
+    ? `<span class="badge">${c.certificate}</span>` : '';
+  const expBadge = c.experiential === 'Y' ? `<span class="badge exp">Experiential</span>` : '';
+  const bizBadge = c.biz_tech === 'Y' ? `<span class="badge biz">Biz+Tech</span>` : '';
+  const newBadge = (c.notes||'').toLowerCase().includes('new course') ? `<span class="badge new">New</span>` : '';
+  const onlineBadge = (c.notes||'').toLowerCase().includes('online') ? `<span class="badge online">Online</span>` : '';
+
+  const addBtn = s === 'neutral'
+    ? `<button class="btn btn-add" onclick="setS('${c.course_num}','added')">+ Add</button>
+       <button class="btn btn-discard" onclick="setS('${c.course_num}','discarded')">Discard</button>`
+    : s === 'added'
+    ? `<button class="btn btn-remove" onclick="setS('${c.course_num}','neutral')">Remove</button>`
+    : `<button class="btn btn-restore" onclick="setS('${c.course_num}','neutral')">Restore</button>`;
+
+  const linkBtn = c.link
+    ? `<button class="btn btn-link" onclick="window.open('${c.link}','_blank')">↗ Details</button>`
+    : '';
+
+  div.innerHTML = `
+    <div class="card-top">
+      <span class="course-id">${c.course_num}</span>
+      <span class="course-name">${c.name}</span>
+    </div>
+    <div class="course-meta">
+      ${c.instructors ? `<span class="meta-item">${c.instructors}</span>` : ''}
+      ${timeStr ? `<span class="meta-item time">${timeStr}</span>` : ''}
+      ${c.dates ? `<span class="meta-item">${c.dates}</span>` : ''}
+      ${c.units ? `<span class="meta-item">${c.units} cr</span>` : ''}
+    </div>
+    ${(certBadge||expBadge||bizBadge||newBadge||onlineBadge) ? `<div class="badges">${certBadge}${expBadge}${bizBadge}${newBadge}${onlineBadge}</div>` : ''}
+    <div class="card-actions">${addBtn}${linkBtn}</div>
+  `;
+  return div;
+}
+
+// ── Render grid ──
+function renderGrid() {
+  const gridEl = document.getElementById('grid');
+  gridEl.innerHTML = '';
+  const totalHours = GRID_END - GRID_START;
+  const gridHeight = totalHours * PX_PER_HR;
+
+  // Header row: time col + 7 day cols
+  const timeHdr = document.createElement('div');
+  timeHdr.className = 'time-col-header';
+  gridEl.appendChild(timeHdr);
+
+  DAYS.forEach((d, i) => {
+    const hdr = document.createElement('div');
+    hdr.className = `day-header${i>=5?' weekend':''}`;
+    hdr.textContent = d;
+    gridEl.appendChild(hdr);
+  });
+
+  // Build per-day course lists for overlap computation
+  const added = COURSES.filter(c => getState(c.course_num) === 'added');
+  const conflicts = findConflicts();
+
+  const dayEvents = Array.from({length:7}, () => []);
+  for (const c of added) {
+    for (const slot of getCourseSlots(c)) {
+      const days = parseDays(slot.day);
+      const t = parseTime(slot.time);
+      if (!t) continue;
+      for (const d of days) {
+        dayEvents[d].push({id: c.course_num, start: t.start, end: t.end});
+      }
+    }
+  }
+  const dayLayouts = dayEvents.map(evs => computeColumns(evs));
+
+  // Time column
+  const timeCol = document.createElement('div');
+  timeCol.className = 'time-col';
+  timeCol.style.height = `${gridHeight}px`;
+  timeCol.style.position = 'relative';
+  for (let h = GRID_START; h < GRID_END; h++) {
+    const row = document.createElement('div');
+    row.className = 'hour-row';
+    const label = document.createElement('div');
+    label.className = 'hour-label';
+    label.textContent = h < 12 ? `${h}am` : h === 12 ? '12pm' : `${h-12}pm`;
+    const half = document.createElement('div');
+    half.className = 'half-line';
+    row.appendChild(label);
+    row.appendChild(half);
+    timeCol.appendChild(row);
+  }
+  gridEl.appendChild(timeCol);
+
+  // Day columns
+  DAYS.forEach((_, dayIdx) => {
+    const col = document.createElement('div');
+    col.className = `day-col${dayIdx>=5?' weekend':''}`;
+    col.style.height = `${gridHeight}px`;
+    col.style.position = 'relative';
+
+    // Grid lines
+    for (let h = 0; h < totalHours; h++) {
+      const row = document.createElement('div');
+      row.className = 'hour-row';
+      const half = document.createElement('div');
+      half.className = 'half-line';
+      row.appendChild(half);
+      col.appendChild(row);
+    }
+
+    // Course blocks — one block per slot that falls on this day
+    const layout = dayLayouts[dayIdx];
+
+    for (const c of added) {
+      const color = getColor(c.course_num);
+      const hasConflict = conflicts.has(c.course_num);
+      for (const slot of getCourseSlots(c)) {
+        if (!parseDays(slot.day).includes(dayIdx)) continue;
+        const t = parseTime(slot.time);
+        if (!t) continue;
+        const lout = layout[c.course_num] || {col:0, totalCols:1};
+        const top = (t.start - GRID_START) * PX_PER_HR;
+        const height = Math.max((t.end - t.start) * PX_PER_HR, 20);
+        const widthPct = 100 / lout.totalCols;
+        const leftPct = lout.col * widthPct;
+
+        const block = document.createElement('div');
+        block.className = `course-block${hasConflict?' conflict':''}`;
+        block.style.cssText = `
+          top:${top}px; height:${height}px;
+          left:calc(${leftPct}% + 2px); width:calc(${widthPct}% - 4px);
+          background:${color.bg}; border-color:${color.border}; color:${color.text};
+        `;
+        const allSlots = getCourseSlots(c).map(s=>`${s.day} ${s.time}`).join(', ');
+        block.innerHTML = `
+          <div class="block-id">${c.course_num}</div>
+          <div class="block-name">${c.name}</div>
+          <div class="block-time">${slot.time}</div>
+          ${hasConflict ? '<div class="conflict-badge">⚠</div>' : ''}
+        `;
+        block.title = `${c.course_num} – ${c.name}\n${c.instructors||''}\n${allSlots}\n${c.dates||''}`;
+        block.addEventListener('click', () => {
+          document.getElementById('search').value = c.course_num;
+          searchQuery = c.course_num.toLowerCase();
+          renderAll();
+        });
+        col.appendChild(block);
+      }
+    }
+
+    gridEl.appendChild(col);
+  });
+
+  // Update grid template rows
+  gridEl.style.gridTemplateRows = `32px ${gridHeight}px`;
+}
+
+function renderAll() {
+  renderSidebar();
+  renderGrid();
+}
+
+// ── Global action ──
+window.setS = function(id, s) {
+  setState(id, s);
+  renderAll();
+};
+
+// ── Tab & search wiring ──
+document.querySelectorAll('.tab').forEach(t => {
+  t.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+    t.classList.add('active');
+    currentTab = t.dataset.tab;
+    renderAll();
+  });
+});
+
+document.getElementById('search').addEventListener('input', e => {
+  searchQuery = e.target.value.toLowerCase();
+  renderAll();
+});
+
+// ── Boot ──
+loadState();
+renderAll();
+</script>
+</body>
+</html>
